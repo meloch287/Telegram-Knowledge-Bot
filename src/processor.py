@@ -172,7 +172,6 @@ class DocumentProcessor:
             self.logger.log_sheets_write(
                 status="success",
                 row_number=row_info.row_number,
-                file_name=metadata.file_name,
             )
         except Exception as e:
             self.logger.log_error(
