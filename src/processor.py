@@ -29,6 +29,7 @@ from src.models.results import (
 )
 from src.models.storage import GoogleSheetsRow
 from src.parsers.factory import ParserFactory
+from src.storage.google_sheets import GoogleSheetsStorage
 from src.utils.logger import ProcessingLogger
 from src.utils.retry_handler import RetryHandler
 from src.utils.validators import validate_file, validate_url
@@ -59,6 +60,13 @@ class DocumentProcessor:
 
         self.summarizer = self._create_summarizer()
         self.keyword_extractor = KeywordExtractor()
+
+        self.sheets_storage = GoogleSheetsStorage(
+            credentials_path=config.google_credentials_path,
+            spreadsheet_id=config.google_sheet_id,
+            sheet_name=config.google_sheet_name,
+            retry_config=retry_config,
+        )
 
     def _create_summarizer(self) -> OpenAISummarizer:
         if self.config.ai_provider == "openrouter":
@@ -150,7 +158,7 @@ class DocumentProcessor:
 
         processing_time = time.time() - start_time
 
-        return ProcessingResult(
+        result = ProcessingResult(
             metadata=metadata,
             parse_result=parse_result,
             summary_result=summary_result,
@@ -158,6 +166,22 @@ class DocumentProcessor:
             status=ProcessingStatus.COMPLETED,
             processing_time=processing_time,
         )
+
+        try:
+            row_info = self.sheets_storage.save_result(result)
+            self.logger.log_sheets_write(
+                status="success",
+                row_number=row_info.row_number,
+                file_name=metadata.file_name,
+            )
+        except Exception as e:
+            self.logger.log_error(
+                error_type="GoogleSheetsError",
+                message=str(e),
+                error_scenario=ErrorScenario.SHEETS_WRITE_ERROR,
+            )
+
+        return result
 
     def _parse_document(
         self,
