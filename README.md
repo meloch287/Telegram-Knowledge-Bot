@@ -10,7 +10,7 @@ Telegram-бот на Python для автоматической обработк
 
 - Поддержка форматов: PDF, DOCX, TXT, MD
 - OCR для сканированных документов (Tesseract)
-- AI-суммаризация (OpenAI GPT, YandexGPT, Claude)
+- AI-суммаризация (OpenRouter, OpenAI GPT, YandexGPT, Claude)
 - Извлечение ключевых слов (YAKE)
 - Сохранение в Google Sheets
 - Загрузка документов по URL
@@ -193,11 +193,36 @@ GOOGLE_SHEET_NAME=Documents
 ```
 
 ### AI API
+
+Поддерживаются провайдеры: `openai`, `openrouter`, `yandex`, `claude`
+
 ```env
-AI_PROVIDER=openai  # openai, yandex, claude
-OPENAI_API_KEY=sk-your-api-key
-OPENAI_MODEL=gpt-4
+AI_PROVIDER=openrouter
+OPENAI_API_KEY=sk-or-v1-your-key
+OPENAI_MODEL=google/gemini-2.0-flash-exp:free
 ```
+
+### Настройка OpenRouter (рекомендуется)
+
+OpenRouter позволяет использовать разные AI модели через единый API, включая бесплатные.
+
+1. Зарегистрируйтесь на https://openrouter.ai
+2. Перейдите в https://openrouter.ai/keys
+3. Нажмите "Create Key" и скопируйте ключ
+4. Укажите в `.env`:
+
+```env
+AI_PROVIDER=openrouter
+OPENAI_API_KEY=sk-or-v1-ваш-ключ
+OPENAI_MODEL=google/gemini-2.0-flash-exp:free
+```
+
+Бесплатные модели:
+- `google/gemini-2.0-flash-exp:free`
+- `meta-llama/llama-3.1-8b-instruct:free`
+- `mistralai/mistral-7b-instruct:free`
+
+Полный список моделей: https://openrouter.ai/models
 
 ### Лимиты обработки
 ```env
