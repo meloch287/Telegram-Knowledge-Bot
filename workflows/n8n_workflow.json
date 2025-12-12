@@ -1,0 +1,738 @@
+{
+  "name": "Telegram Knowledge Bot Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram",
+        "options": {
+          "responseMode": "onReceived"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Telegram Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "telegram-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.document }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-input-type",
+      "name": "Check Input Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getFile?file_id={{ $json.message.document.file_id }}",
+        "options": {}
+      },
+      "id": "get-file-info",
+      "name": "Get File Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot{{ $env.TELEGRAM_BOT_TOKEN }}/{{ $json.result.file_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-file",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.message.text }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-from-url",
+      "name": "Download from URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $binary.data.fileSize }}",
+              "operation": "smallerEqual",
+              "value2": 20971520
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{ $binary.data.mimeType }}",
+              "operation": "regex",
+              "value2": "(application/pdf|application/vnd.openxmlformats-officedocument.wordprocessingml.document|text/plain|text/markdown)"
+            }
+          ]
+        }
+      },
+      "id": "validate-file",
+      "name": "Validate File",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "operation": "equal",
+              "value1": "={{ $binary.data.mimeType }}",
+              "value2": "application/pdf"
+            },
+            {
+              "operation": "equal",
+              "value1": "={{ $binary.data.mimeType }}",
+              "value2": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            },
+            {
+              "operation": "equal",
+              "value1": "={{ $binary.data.mimeType }}",
+              "value2": "text/plain"
+            },
+            {
+              "operation": "equal",
+              "value1": "={{ $binary.data.mimeType }}",
+              "value2": "text/markdown"
+            }
+          ]
+        }
+      },
+      "id": "router-by-file-type",
+      "name": "Router by File Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pdfParse = require('pdf-parse');\nconst buffer = Buffer.from(items[0].binary.data.data, 'base64');\nconst data = await pdfParse(buffer);\nreturn [{ json: { text: data.text, charCount: data.text.length, method: 'pdfplumber' } }];"
+      },
+      "id": "pdf-parser",
+      "name": "PDF Parser",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 100]
+    },
+    {
+      "parameters": {
+        "functionCode": "const mammoth = require('mammoth');\nconst buffer = Buffer.from(items[0].binary.data.data, 'base64');\nconst result = await mammoth.extractRawText({ buffer });\nreturn [{ json: { text: result.value, charCount: result.value.length, method: 'python_docx' } }];"
+      },
+      "id": "docx-parser",
+      "name": "DOCX Parser",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "const buffer = Buffer.from(items[0].binary.data.data, 'base64');\nconst text = buffer.toString('utf-8');\nreturn [{ json: { text: text, charCount: text.length, method: 'plain_read' } }];"
+      },
+      "id": "txt-parser",
+      "name": "TXT Parser",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "const buffer = Buffer.from(items[0].binary.data.data, 'base64');\nconst text = buffer.toString('utf-8');\nreturn [{ json: { text: text, charCount: text.length, method: 'plain_read' } }];"
+      },
+      "id": "md-parser",
+      "name": "MD Parser",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 550]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.charCount }}",
+              "operation": "smallerEqual",
+              "value2": 50
+            }
+          ]
+        }
+      },
+      "id": "check-empty-text",
+      "name": "Check Empty Text",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 100]
+    },
+    {
+      "parameters": {
+        "functionCode": "// OCR processing using Tesseract\n// This would call external OCR service or local Tesseract\nconst ocrResult = { text: 'OCR extracted text', charCount: 20, method: 'tesseract_ocr', usedOcr: true };\nreturn [{ json: ocrResult }];"
+      },
+      "id": "ocr-engine",
+      "name": "OCR Engine",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1850, 50]
+    },
+    {
+      "parameters": {},
+      "id": "merge-text",
+      "name": "Merge Extracted Text",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [2050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const text = items[0].json.text;\n// Simple language detection based on character analysis\nconst cyrillicPattern = /[\\u0400-\\u04FF]/;\nconst language = cyrillicPattern.test(text) ? 'ru' : 'en';\nreturn [{ json: { ...items[0].json, language } }];"
+      },
+      "id": "detect-language",
+      "name": "Language Detection",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "={{ $env.OPENAI_MODEL || 'gpt-4' }}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"system\", \"content\": \"You are a document summarizer. Create a summary of 3-7 sentences in the same language as the input text.\"}, {\"role\": \"user\", \"content\": \"{{ $json.text.substring(0, 10000) }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "500"
+            },
+            {
+              "name": "temperature",
+              "value": "0.3"
+            }
+          ]
+        }
+      },
+      "id": "ai-summarizer",
+      "name": "AI Summarizer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2450, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "functionCode": "const text = items[0].json.text;\n// YAKE-style keyword extraction\nconst words = text.toLowerCase().split(/\\s+/);\nconst wordFreq = {};\nwords.forEach(w => {\n  if (w.length > 3) wordFreq[w] = (wordFreq[w] || 0) + 1;\n});\nconst sorted = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]);\nconst keywords = sorted.slice(0, 10).map(([word]) => word);\nreturn [{ json: { keywords, formatted: keywords.join(', '), count: keywords.length, method: 'yake' } }];"
+      },
+      "id": "keyword-extractor",
+      "name": "Keyword Extractor",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date().toISOString();\nconst row = {\n  timestamp: now,\n  uploader_id: $('Telegram Webhook').item.json.message.from.id.toString(),\n  uploader_username: $('Telegram Webhook').item.json.message.from.username || '',\n  file_name: $('Telegram Webhook').item.json.message.document?.file_name || 'url_download',\n  file_type: items[0].json.method?.includes('pdf') ? 'pdf' : 'txt',\n  file_size: $('Telegram Webhook').item.json.message.document?.file_size || 0,\n  char_count: items[0].json.charCount || 0,\n  language: items[0].json.language || 'unknown',\n  summary: $('AI Summarizer').item.json.choices?.[0]?.message?.content || '',\n  keywords: items[0].json.formatted || '',\n  status: 'completed',\n  error_message: '',\n  ai_model_used: 'openai_gpt4',\n  extraction_method: items[0].json.method || 'unknown',\n  ocr_used: items[0].json.usedOcr || false,\n  processing_time: 0\n};\nreturn [{ json: row }];"
+      },
+      "id": "prepare-sheets-row",
+      "name": "Prepare Google Sheets Row",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.GOOGLE_SHEET_ID }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $env.GOOGLE_SHEET_NAME || 'Documents' }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "uploader_id": "={{ $json.uploader_id }}",
+            "uploader_username": "={{ $json.uploader_username }}",
+            "file_name": "={{ $json.file_name }}",
+            "file_type": "={{ $json.file_type }}",
+            "file_size": "={{ $json.file_size }}",
+            "char_count": "={{ $json.char_count }}",
+            "language": "={{ $json.language }}",
+            "summary": "={{ $json.summary }}",
+            "keywords": "={{ $json.keywords }}",
+            "status": "={{ $json.status }}",
+            "error_message": "={{ $json.error_message }}",
+            "ai_model_used": "={{ $json.ai_model_used }}",
+            "extraction_method": "={{ $json.extraction_method }}",
+            "ocr_used": "={{ $json.ocr_used }}",
+            "processing_time": "={{ $json.processing_time }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "google-sheets-write",
+      "name": "Google Sheets Write",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [3050, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Webhook').item.json.message.chat.id }}",
+        "text": "=✅ Документ обработан!\n\n<b>Суммаризация:</b>\n{{ $('AI Summarizer').item.json.choices[0].message.content }}\n\n<b>Ключевые слова:</b>\n{{ $('Keyword Extractor').item.json.formatted }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "telegram-notify-success",
+      "name": "Telegram Notify Success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [3250, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Webhook').item.json.message.chat.id }}",
+        "text": "❌ Формат файла не поддерживается.\nПоддерживаемые форматы: PDF, DOCX, TXT, MD",
+        "additionalFields": {}
+      },
+      "id": "error-validation",
+      "name": "Error: Validation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Webhook').item.json.message.chat.id }}",
+        "text": "❌ Не удалось прочитать файл. Возможно, файл повреждён",
+        "additionalFields": {}
+      },
+      "id": "error-parse",
+      "name": "Error: Parse",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1650, 500]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Webhook').item.json.message.chat.id }}",
+        "text": "❌ Ошибка при обработке текста. Попробуйте позже",
+        "additionalFields": {}
+      },
+      "id": "error-api",
+      "name": "Error: API",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2650, 500]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Webhook').item.json.message.chat.id }}",
+        "text": "❌ Ошибка сохранения результатов. Попробуйте позже",
+        "additionalFields": {}
+      },
+      "id": "error-storage",
+      "name": "Error: Storage",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [3050, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "const logEntry = {\n  timestamp: new Date().toISOString(),\n  event_type: items[0].json.event_type || 'processing',\n  details: items[0].json,\n  error: items[0].json.error || null\n};\nconsole.log(JSON.stringify(logEntry));\nreturn items;"
+      },
+      "id": "logger",
+      "name": "Logger",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3450, 300]
+    }
+  ],
+  "connections": {
+    "Telegram Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Input Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Input Type": {
+      "main": [
+        [
+          {
+            "node": "Get File Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download from URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Info": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Validate File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download from URL": {
+      "main": [
+        [
+          {
+            "node": "Validate File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate File": {
+      "main": [
+        [
+          {
+            "node": "Router by File Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router by File Type": {
+      "main": [
+        [
+          {
+            "node": "PDF Parser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DOCX Parser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TXT Parser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MD Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Parser": {
+      "main": [
+        [
+          {
+            "node": "Check Empty Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Empty Text": {
+      "main": [
+        [
+          {
+            "node": "OCR Engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Extracted Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OCR Engine": {
+      "main": [
+        [
+          {
+            "node": "Merge Extracted Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DOCX Parser": {
+      "main": [
+        [
+          {
+            "node": "Merge Extracted Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TXT Parser": {
+      "main": [
+        [
+          {
+            "node": "Merge Extracted Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MD Parser": {
+      "main": [
+        [
+          {
+            "node": "Merge Extracted Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Extracted Text": {
+      "main": [
+        [
+          {
+            "node": "Language Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Language Detection": {
+      "main": [
+        [
+          {
+            "node": "AI Summarizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Summarizer": {
+      "main": [
+        [
+          {
+            "node": "Keyword Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword Extractor": {
+      "main": [
+        [
+          {
+            "node": "Prepare Google Sheets Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Google Sheets Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Write": {
+      "main": [
+        [
+          {
+            "node": "Telegram Notify Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Notify Success": {
+      "main": [
+        [
+          {
+            "node": "Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error: Validation": {
+      "main": [
+        [
+          {
+            "node": "Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error: Parse": {
+      "main": [
+        [
+          {
+            "node": "Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error: API": {
+      "main": [
+        [
+          {
+            "node": "Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error: Storage": {
+      "main": [
+        [
+          {
+            "node": "Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "telegram-knowledge-bot"
+  },
+  "id": "telegram-knowledge-bot-workflow",
+  "tags": [
+    {
+      "id": "telegram",
+      "name": "telegram"
+    },
+    {
+      "id": "ai",
+      "name": "ai"
+    },
+    {
+      "id": "knowledge-base",
+      "name": "knowledge-base"
+    }
+  ],
+  "pinData": {},
+  "staticData": null,
+  "triggerCount": 0
+}

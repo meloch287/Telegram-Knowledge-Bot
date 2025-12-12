@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+.git/
+.gitignore
+*.md
+tests/
+.env.example
+.kiro/
